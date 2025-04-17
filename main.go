@@ -59,28 +59,86 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"go-test/proto"
 	"log"
 	"time"
 
-	"go-test/proto" // Update this import path to match your project
-
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 )
 
+var jwtKey = []byte("your-secret-key")
+
 func main() {
-	// Initialize Fiber app
 	app := fiber.New()
 
-	// Route for fetching inventory
-	app.Get("/inventory", func(c *fiber.Ctx) error {
-		username := c.Query("username")
-		password := c.Query("password")
+	// Login route - gets JWT from Auth Service
+	app.Post("/login", func(c *fiber.Ctx) error {
+		type LoginInput struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		var input LoginInput
+		if err := c.BodyParser(&input); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid input"})
+		}
 
-		if !authenticateUser(username, password) {
-			return c.Status(401).JSON(fiber.Map{
-				"message": "Authentication failed",
-			})
+		// Connect to user auth service
+		conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			log.Printf("gRPC dial error: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "Auth service unreachable"})
+		}
+		defer conn.Close()
+
+		client := proto.NewUserAuthServiceClient(conn)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		defer cancel()
+
+		resp, err := client.Login(ctx, &proto.LoginRequest{
+			Username: input.Username,
+			Password: input.Password,
+		})
+		if err != nil || !resp.Success {
+			return c.Status(401).JSON(fiber.Map{"error": "Invalid credentials"})
+		}
+
+		return c.JSON(fiber.Map{
+			"message": "Login successful",
+			"token":   resp.Token,
+		})
+	})
+
+	// Inventory route - JWT protected
+	app.Get("/inventory", func(c *fiber.Ctx) error {
+		tokenStr := c.Get("Authorization")
+
+		if tokenStr == "" {
+			return c.Status(401).SendString("Missing token")
+		}
+
+		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method")
+			}
+			return jwtKey, nil
+		})
+
+		if err != nil {
+			fmt.Println("Token parse error:", err)
+			c.Status(401).SendString("Unauthorized")
+			return c.Status(401).SendString("Unauthorized")
+		}
+
+		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+			fmt.Println("Authenticated User:", claims["username"])
+			// Proceed to the next middleware or handler
+		} else {
+			c.Status(401).SendString("Unauthorized")
+			return c.Status(401).SendString("Unauthorized")
 		}
 
 		return c.JSON(fiber.Map{
@@ -88,32 +146,5 @@ func main() {
 		})
 	})
 
-	app.Listen(":3000")
-}
-
-func authenticateUser(username, password string) bool {
-	// Connect to the User Authentication Service via gRPC
-	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		log.Fatalf("failed to connect: %v", err)
-	}
-	defer conn.Close()
-
-	client := proto.NewUserAuthServiceClient(conn)
-
-	// Make the gRPC call to the UserAuthService.Login method
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	req := &proto.LoginRequest{
-		Username: username,
-		Password: password,
-	}
-
-	resp, err := client.Login(ctx, req)
-	if err != nil {
-		log.Fatalf("could not login: %v", err)
-	}
-
-	return resp.GetSuccess()
+	log.Fatal(app.Listen(":3000"))
 }

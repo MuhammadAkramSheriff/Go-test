@@ -1,22 +1,23 @@
 syntax = "proto3";
 
-package proto;
+package auth;
 
 option go_package = "./proto";
 
-// User login request
+//request and response messages
 message LoginRequest {
     string username = 1;
     string password = 2;
 }
 
-// User login response
 message LoginResponse {
-    string message = 1;
-    bool success = 2;
+    bool success = 1;
+    string message = 2;
+    string token = 3;
 }
 
-// The user authentication service
-service UserService {
-    rpc Login (LoginRequest) returns (LoginResponse);
+//the User Authentication service
+service UserAuthService {
+    rpc Login(LoginRequest) returns (LoginResponse);
 }
+

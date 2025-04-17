@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.30.2
-// source: auth.proto
+// source: proto/auth.proto
 
 package proto
 
@@ -26,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Define the User Authentication service
+// the User Authentication service
 type UserAuthServiceClient interface {
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 }
@@ -53,7 +53,7 @@ func (c *userAuthServiceClient) Login(ctx context.Context, in *LoginRequest, opt
 // All implementations must embed UnimplementedUserAuthServiceServer
 // for forward compatibility.
 //
-// Define the User Authentication service
+// the User Authentication service
 type UserAuthServiceServer interface {
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	mustEmbedUnimplementedUserAuthServiceServer()
@@ -121,5 +121,5 @@ var UserAuthService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "auth.proto",
+	Metadata: "proto/auth.proto",
 }
